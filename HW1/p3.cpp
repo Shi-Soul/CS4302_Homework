@@ -9,6 +9,7 @@ A 2D convolution, using OpenMP
 #include <math.h>
 
 #define NUM_THREADS 4
+#define BLOCK_SIZE 16
 
 void SerialConvolution(int M, int N, int K, double **input, double **kernel, double **output){
     int half_k = K / 2;
@@ -25,20 +26,36 @@ void SerialConvolution(int M, int N, int K, double **input, double **kernel, dou
     }
 }
 
+
 void ParallelConvolution(int M, int N, int K, double **input, double **kernel, double **output){
     int half_k = K / 2;
-    #pragma omp parallel for collapse(2)  num_threads(NUM_THREADS)
-    for (int i = 0; i < M-K+1; i++) {
-        for (int j = 0; j < N-K+1; j++) {
-            output[i][j] = 0;
-            for (int x = 0; x < K; x++) {
-                for (int y = 0; y < K; y++) {
-                    output[i][j] += input[i + x][j + y] * kernel[x][y];
+    
+    // Thread and cache blocking
+    int blockSize = BLOCK_SIZE;  // Block size can be tuned for the architecture
+
+    #pragma omp parallel for collapse(2) num_threads(NUM_THREADS) schedule(static)
+    for (int i = 0; i < M-K+1; i += blockSize) {
+        for (int j = 0; j < N-K+1; j += blockSize) {
+
+            // Loop over blocks
+            for (int ii = i; ii < i + blockSize && ii < M-K+1; ii++) {
+                for (int jj = j; jj < j + blockSize && jj < N-K+1; jj++) {
+                    double sum = 0.0;
+                    
+                    // Perform the convolution operation
+                    #pragma omp simd reduction(+:sum) aligned(input, kernel: 64) 
+                    for (int x = 0; x < K; x++) {
+                        for (int y = 0; y < K; y++) {
+                            sum += input[ii + x][jj + y] * kernel[x][y];
+                        }
+                    }
+                    output[ii][jj] = sum;
                 }
             }
         }
     }
 }
+
 
 int main(int argc, char *argv[]){
     int M, N, K;

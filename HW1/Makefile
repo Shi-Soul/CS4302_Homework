@@ -1,3 +1,7 @@
+.PHONY: all p1 p2 p3 clean
+
+all: p1 p2 p3
+
 p1: p1.cpp
 	g++ -fopenmp -Ofast -o p1 p1.cpp
 
