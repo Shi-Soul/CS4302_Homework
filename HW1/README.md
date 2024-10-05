@@ -1,5 +1,7 @@
 # Homework 1
 
+Weiji Xie, 2024.10.05
+
 We successfully achieve more than 3.5x speedup with 4 threads in all problems and more than 10x speedup in p3, showing the effectiveness of OpenMP parallelization.
 
 
