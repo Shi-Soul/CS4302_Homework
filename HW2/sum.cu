@@ -7,7 +7,7 @@ Array Sum in CUDA
 #include <cassert>
 #include <chrono>
 
-const int BLOCK_SIZE = 1024;
+const int BLOCK_SIZE = 256;
 
 
 __global__ void array_sum_v0(float *arr, int N, float *result) {
@@ -23,12 +23,24 @@ __global__ void array_sum_v1(float *arr, int N, float *result) {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
     partialSum[threadIdx.x] = (tid < N) ? arr[tid] : 0;
     __syncthreads();
-    for (int s = BLOCK_SIZE / 2; s > 0; s >>= 1) {
+    int s;
+    for (s = BLOCK_SIZE / 2; s > 32; s >>= 1) {
         if (threadIdx.x < s) {
             partialSum[threadIdx.x] += partialSum[threadIdx.x + s];
         }
         __syncthreads();
     }
+    if (threadIdx.x < 32) {
+        volatile float* smem = partialSum;
+        smem[threadIdx.x] += smem[threadIdx.x + 32];
+        smem[threadIdx.x] += smem[threadIdx.x + 16];
+        smem[threadIdx.x] += smem[threadIdx.x + 8];
+        smem[threadIdx.x] += smem[threadIdx.x + 4];
+        smem[threadIdx.x] += smem[threadIdx.x + 2];
+        smem[threadIdx.x] += smem[threadIdx.x + 1];
+    }
+
+
     if (threadIdx.x == 0) {
         result[blockIdx.x] = partialSum[0];
     }
@@ -44,6 +56,7 @@ void array_sum_cuda(float *arr, int N, float *result) {
     cudaMalloc((void**)&d_result, num_blocks * sizeof(float));
     cudaMemcpy(d_arr, arr, N * sizeof(float), cudaMemcpyHostToDevice);
 
+    std::cout << "num_blocks: " << num_blocks << std::endl;
 
     array_sum_v1<<<num_blocks, BLOCK_SIZE, BLOCK_SIZE * sizeof(float)>>>(d_arr, N, d_result);
 
@@ -154,7 +167,7 @@ int main(int argc, char **argv) {
 
     float *arr = new float[N];
     for (int i = 0; i < N; i++) {
-        arr[i] = rand() % 10;
+        arr[i] = (rand() % 11)-5;
     }
 
     float *result_cuda = new float[1];
@@ -172,20 +185,21 @@ int main(int argc, char **argv) {
     // Claude_main(arr, N, result_cuda);
     auto end = std::chrono::high_resolution_clock::now();
     auto t_cuda = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-    std::cout << "Time taken by CUDA: \t" << t_cuda << " ms" << std::endl;
+    std::cout << "Time taken by CUDA: \t" << t_cuda /1000 << " ms" << std::endl;
 
     start = std::chrono::high_resolution_clock::now();
     array_sum_cpu(arr, N, result_cpu);
     end = std::chrono::high_resolution_clock::now();
     auto t_cpu = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-    std::cout << "Time taken by CPU: \t" << t_cpu << " ms" << std::endl;
+    std::cout << "Time taken by CPU: \t" << t_cpu /1000 << " ms" << std::endl;
 
-    bool correctness = fabs(result_cuda[0]- result_cpu[0])/result_cpu[0] < 1e-3;
+    bool correctness = fabs((result_cuda[0]- result_cpu[0])/result_cpu[0]) < 1e-3;
     std::cout << "Correctness: " << correctness << std::endl;
     if (!correctness) {
         std::cerr << "CUDA result is incorrect! " << result_cuda[0] << " != " << result_cpu[0] << std::endl;
         return 1;
     }
+    std::cerr << "CUDA result is correct! " << result_cuda[0] << " == " << result_cpu[0] << std::endl;
     float speedup = 1.0*t_cpu / t_cuda;
     std::cout << "Speedup: " << speedup << std::endl;
 }
