@@ -3,12 +3,13 @@ A Parallel version of Floyd's algorithm for all pairs shortest path problem, usi
 */
 
 #include <iostream>
-#include <vector>
 #include <omp.h>
 
 using namespace std;
 
-void SerialFloyd(vector<vector<int>> &graph, int n) {
+const int NUM_THREADS = 4;
+
+void SerialFloyd(int **graph, int n) {
     for (int k = 0; k < n; k++) {
         for (int i = 0; i < n; i++) {
             for (int j = 0; j < n; j++) {
@@ -18,7 +19,7 @@ void SerialFloyd(vector<vector<int>> &graph, int n) {
     }
 }
 
-void ParallelFloyd(vector<vector<int>> &graph, int n) {
+void ParallelFloyd(int **graph, int n) {
     for (int k = 0; k < n; k++) {
         #pragma omp parallel for
         for (int i = 0; i < n; i++) {
@@ -27,23 +28,25 @@ void ParallelFloyd(vector<vector<int>> &graph, int n) {
             }
         }
     }
-    #pragma omp barrier
 }
 
 int main() {
+    omp_set_num_threads(NUM_THREADS); 
     const int N = 1000;
+    int **graph = new int*[N];
+    int **graph_serial = new int*[N];
+    int **graph_parallel = new int*[N];
 
-    vector<vector<int>> graph(N, vector<int>(N));
-    // Randomly generate a graph
     for (int i = 0; i < N; i++) {
+        graph[i] = new int[N];
+        graph_serial[i] = new int[N];
+        graph_parallel[i] = new int[N];
         for (int j = 0; j < N; j++) {
             graph[i][j] = (i != j) ? (rand() % 100) : 0;
+            graph_serial[i][j] = graph[i][j];
+            graph_parallel[i][j] = graph[i][j];
         }
     }
-
-    // Copy the graph to a new graph for correctness check
-    vector<vector<int>> graph_serial = graph;
-    vector<vector<int>> graph_parallel = graph;
 
     double t1 = omp_get_wtime();
     SerialFloyd(graph_serial, N);
@@ -63,6 +66,17 @@ int main() {
     cout << "Done!" << endl;
     cout << "Serial time: " << t2 - t1 << " seconds" << endl;
     cout << "Parallel time: " << t3 - t2 << " seconds" << endl;
+
+    // Cleanup dynamically allocated memory
+    for (int i = 0; i < N; i++) {
+        delete[] graph[i];
+        delete[] graph_serial[i];
+        delete[] graph_parallel[i];
+    }
+    delete[] graph;
+    delete[] graph_serial;
+    delete[] graph_parallel;
+
     return 0;
 }
 
